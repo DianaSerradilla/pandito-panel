@@ -1,0 +1,147 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/dm-sans';
+
+/*
+ * Tokens from the Pandito brand manual 2026 (Paleta Pista, DM Sans for text and data).
+ * Roles: tinta = text and dark surfaces, crema = light background, azul = strong accent and primary
+ * actions, naranja = the logo only, amarillo = small details on dark. Approved small-text pairs:
+ * tinta/crema, crema/tinta, crema/azul, amarillo/tinta.
+ * The names ink / paper / accent / line / muted are kept so existing screens pick the palette up.
+ * `line` and `muted` are derived from crema and tinta (not in the manual).
+ */
+@theme {
+  --font-sans: 'DM Sans Variable', system-ui, sans-serif;
+  --color-naranja: #d4571f;
+  /* Darker than the logo orange so white text on it keeps a readable contrast. */
+  --color-naranja-dark: #b8430c;
+  --color-azul: #2340e8;
+  --color-tinta: #14141a;
+  --color-crema: #f5eee2;
+  --color-amarillo: #ffd23f;
+
+  --color-ink: var(--color-tinta);
+  --color-paper: var(--color-crema);
+  --color-accent: var(--color-azul);
+  --color-crema-deep: #ece3d1;
+  --color-surface: #fbf9f5;
+  --color-line: #d9cfbd;
+  --color-muted: #5c564e;
+  --color-danger: #b3261e;
+  --color-ok: #1e6b3a;
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(2rem);
+    opacity: 0;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+
+@layer base {
+  /* The page behind an open modal must not scroll. The gutter keeps the layout from jumping. */
+  html {
+    scrollbar-gutter: stable;
+  }
+  body:has(dialog[open]) {
+    overflow: hidden;
+  }
+  body {
+    background: var(--color-paper);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+  }
+  :focus-visible {
+    outline: 3px solid var(--color-azul);
+    outline-offset: 2px;
+  }
+  .input:focus-visible {
+    outline: none;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+  thead th {
+    background: color-mix(in srgb, var(--color-crema-deep) 55%, white);
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    padding: 0.625rem 0.75rem;
+    text-align: left;
+  }
+  thead th:first-child {
+    border-top-left-radius: 0.5rem;
+    border-bottom-left-radius: 0.5rem;
+  }
+  thead th:last-child {
+    border-top-right-radius: 0.5rem;
+    border-bottom-right-radius: 0.5rem;
+  }
+  tbody td {
+    padding: 0.625rem 0.75rem;
+  }
+  tbody tr + tr td {
+    border-top: 1px solid var(--color-line);
+  }
+}
+
+@layer components {
+  /* Side panel: slides in from the right when it opens, in answer to the click that opened it. */
+  dialog.drawer[open] {
+    animation: drawer-in 220ms ease-out;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    dialog.drawer[open] {
+      animation: none;
+    }
+  }
+  /* A plain block on the page: panels use the full width, no white box around them. */
+  .card {
+    @apply bg-transparent;
+  }
+  .chip {
+    @apply inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium;
+  }
+  .chip-ok {
+    @apply bg-green-100 text-ok;
+  }
+  .chip-warn {
+    @apply bg-amber-100 text-amber-900;
+  }
+  .chip-off {
+    @apply bg-crema-deep text-muted;
+  }
+  .chip-bad {
+    @apply bg-red-100 text-danger;
+  }
+  .input {
+    @apply min-h-11 w-full rounded-lg border border-line bg-white px-3 text-base shadow-xs placeholder:text-muted/60 focus:border-azul/50 focus:ring-4 focus:ring-azul/10 focus:outline-hidden;
+  }
+  /* One look for every select: no native arrow, our own chevron, full width of its field. */
+  select.input {
+    @apply appearance-none bg-no-repeat pr-10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4 6l4 4 4-4' stroke='%235c564e' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-size: 1rem;
+  }
+  .btn {
+    @apply inline-flex min-h-11 items-center justify-center rounded-lg bg-naranja-dark px-5 text-sm font-medium text-white shadow-xs hover:bg-naranja-dark/90 disabled:opacity-50;
+  }
+  .btn-quiet {
+    @apply inline-flex min-h-11 items-center justify-center rounded-lg border border-naranja-dark bg-transparent px-4 text-sm font-medium text-naranja-dark hover:bg-naranja-dark/10 disabled:border-line disabled:text-muted disabled:hover:bg-transparent;
+  }
+  .label {
+    @apply mb-1 block text-sm font-medium;
+  }
+  .hint {
+    @apply text-sm text-muted;
+  }
+  .error {
+    @apply rounded-md bg-red-50 p-3 text-sm text-danger;
+  }
+}
