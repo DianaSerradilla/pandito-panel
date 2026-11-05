@@ -132,12 +132,12 @@ export function CloseCount({ event, items, pending, onBack, onClosed }: Props) {
                 <input id={`left-${info.id}`} inputMode="numeric" className="input" value={entry.left} onChange={(e) => setEntry(info.id, { left: e.target.value })} />
               </div>
             </div>
-            {touched && diff !== null && expected !== null && (
+            {touched && diff !== null && expected !== null && expected >= 0 && (
               <p className={`chip ${diff === 0 ? 'chip-ok' : 'chip-warn'}`}>
-                {diff === 0 ? 'Sin diferencia' : diff < 0 ? `Faltan ${-diff}` : `Sobran ${diff}`}
+                {diff === 0 ? 'Sin diferencia' : diff < 0 ? `Faltan ${-diff}: se registran como pérdida` : `Sobran ${diff}`}
               </p>
             )}
-            {touched && diff !== null && diff !== 0 && (
+            {touched && diff !== null && diff !== 0 && expected !== null && expected >= 0 && (
               <div>
                 <label className="label" htmlFor={`note-${info.id}`}>Qué pasó</label>
                 <input id={`note-${info.id}`} className="input" value={entry.note} onChange={(e) => setEntry(info.id, { note: e.target.value })} />

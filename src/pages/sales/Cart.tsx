@@ -3,7 +3,7 @@ import { Drawer } from '../../components/Drawer.tsx'
 import { useToast } from '../../components/toast.ts'
 import { paymentLabels, type EventRow, type Promotion } from '../../data/types.ts'
 import type { VariantInfo } from '../../data/useVariantCatalog.ts'
-import { applyPromotions, describeDiscount, type PromoUnit } from '../../lib/promoMatch.ts'
+import { applyPromotions, describeDiscount, isCurrent, type PromoUnit } from '../../lib/promoMatch.ts'
 import { isConnectionError, newClientId, queueTicket, type TicketPayload } from '../../lib/pendingTickets.ts'
 import { supabase } from '../../lib/supabase.ts'
 
@@ -54,7 +54,10 @@ const nowIso = () => new Date().toISOString()
 export function Cart({ asPanel, open, onClose, event, items, quantities, promotions, designsOf, onChange, onClear, onConfirmed }: Props) {
   const [outcome, setOutcome] = useState<Outcome>('sale')
   const [payment, setPayment] = useState('cash')
-  const [skipPromo, setSkipPromo] = useState(false)
+  const [withPromo, setWithPromo] = useState(false)
+  const [promoId, setPromoId] = useState('')
+  const [finalText, setFinalText] = useState('')
+  const [priceReason, setPriceReason] = useState('')
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const { notify } = useToast()
@@ -74,15 +77,32 @@ export function Cart({ asPanel, open, onClose, event, items, quantities, promoti
       price: item.price ?? 0,
     })),
   )
-  const result = outcome === 'sale' ? applyPromotions(promotions, designsOf, promoUnits) : { applied: [], discount: 0, hints: [] }
-  const applied = skipPromo ? [] : result.applied
+  // The promotion is chosen by hand: "Sin promo" by default, or one of the current ones.
+  const currentPromos = promotions.filter((p) => isCurrent(p))
+  const chosen = withPromo ? currentPromos.find((p) => p.id === promoId) : undefined
+  const result =
+    outcome === 'sale' && chosen ? applyPromotions([chosen], designsOf, promoUnits) : { applied: [], discount: 0, hints: [] }
+  const applied = result.applied
   const hints = result.hints
-  const discount = skipPromo ? 0 : result.discount
-  const total = outcome === 'sale' ? subtotal - discount : 0
+  const promoDiscount = result.discount
+  const calculated = subtotal - promoDiscount
+
+  // Final price typed by hand: it can only go below the calculated one, and it needs a reason.
+  const typed = finalText.trim() === '' ? null : /^\d+$/.test(finalText.trim()) ? Number(finalText.trim()) : NaN
+  const adjusted = outcome === 'sale' && typed !== null && Number.isFinite(typed) && typed < calculated
+  const priceProblem =
+    outcome !== 'sale' || typed === null ? null
+    : Number.isNaN(typed) ? 'Escribí solo números.'
+    : typed > calculated ? `Solo se puede bajar el precio (máximo ${money(calculated)}).`
+    : adjusted && priceReason.trim() === '' ? 'Contá por qué cambiaste el precio.'
+    : null
+  const total = outcome === 'sale' ? (adjusted ? (typed as number) : calculated) : 0
+  const discount = outcome === 'sale' ? subtotal - total : 0
   const current = outcomes.find((o) => o.value === outcome) ?? outcomes[0]
 
   async function confirm() {
-    if (!supabase || lines.length === 0) return
+    if (!supabase || lines.length === 0 || priceProblem) return
+    const clientId = newClientId()
     setBusy(true)
     const payload: TicketPayload = {
       p_kind: outcome,
@@ -90,22 +110,26 @@ export function Cart({ asPanel, open, onClose, event, items, quantities, promoti
       p_event_id: event.id,
       p_discount: outcome === 'sale' ? discount : 0,
       p_promo_snapshot:
-        applied.length > 0
+        applied.length > 0 || adjusted
           ? {
-              promotions: applied.map((a) => ({
-                id: a.promotion.id,
-                name: a.promotion.name,
-                kind: a.promotion.kind,
-                times: a.times,
-                pack_price: a.packPrice,
-                discount: a.saved,
-              })),
+              ...(applied.length > 0
+                ? {
+                    promotions: applied.map((a) => ({
+                      id: a.promotion.id,
+                      name: a.promotion.name,
+                      kind: a.promotion.kind,
+                      times: a.times,
+                      pack_price: a.packPrice,
+                      discount: a.saved,
+                    })),
+                  }
+                : {}),
+              ...(adjusted ? { manual_price: { calculated, final: total, reason: priceReason.trim() } } : {}),
             }
           : null,
       p_payment_method: outcome === 'sale' ? payment : null,
       p_note: note.trim() || null,
     }
-    const clientId = newClientId()
     const { error: failure } = await supabase.rpc('confirm_ticket', { ...payload, p_client_id: clientId })
     setBusy(false)
     let queued = false
@@ -121,7 +145,10 @@ export function Cart({ asPanel, open, onClose, event, items, quantities, promoti
     if (queued) notify('Sin conexión: el ticket quedó guardado en este celular y se envía solo.', 'success')
     else notify(outcome === 'sale' ? `${current.done}: ${money(total)}` : current.done, 'success')
     setOutcome('sale')
-    setSkipPromo(false)
+    setWithPromo(false)
+    setPromoId('')
+    setFinalText('')
+    setPriceReason('')
     setNote('')
     onConfirmed()
     onClose()
@@ -164,7 +191,7 @@ export function Cart({ asPanel, open, onClose, event, items, quantities, promoti
         <legend className="label">¿Qué pasó?</legend>
         <div className="grid grid-cols-3 gap-2">
           {outcomes.map((o) => (
-            <button key={o.value} type="button" aria-pressed={outcome === o.value} className={choiceClass(outcome === o.value)} onClick={() => { setOutcome(o.value); setSkipPromo(false) }}>
+            <button key={o.value} type="button" aria-pressed={outcome === o.value} className={choiceClass(outcome === o.value)} onClick={() => { setOutcome(o.value); setWithPromo(false); setPromoId(''); setFinalText(''); setPriceReason('') }}>
               {o.label}
             </button>
           ))}
@@ -184,32 +211,72 @@ export function Cart({ asPanel, open, onClose, event, items, quantities, promoti
         </fieldset>
       )}
 
-      {outcome === 'sale' && (result.applied.length > 0 || hints.length > 0) && (
+      {outcome === 'sale' && (
         <fieldset className="space-y-2">
-          <legend className="label">Promo</legend>
-          {result.applied.length > 0 && (
-            <div className="space-y-2">
-              {result.applied.map((a) => (
-                <div key={`${a.promotion.id}|${a.packPrice}`} className={`flex min-h-11 items-center gap-3 rounded-xl border-2 px-3 py-2 text-sm ${skipPromo ? 'border-line bg-white opacity-60' : 'border-naranja-dark bg-white'}`}>
+          <legend className="label">¿Va con promo?</legend>
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" aria-pressed={!withPromo} className={choiceClass(!withPromo)} onClick={() => { setWithPromo(false); setPromoId('') }}>
+              Sin promo
+            </button>
+            <button type="button" aria-pressed={withPromo} className={choiceClass(withPromo)} onClick={() => setWithPromo(true)} disabled={currentPromos.length === 0}>
+              Con promo
+            </button>
+          </div>
+          {currentPromos.length === 0 && <p className="hint">No hay promos vigentes cargadas.</p>}
+          {withPromo && (
+            <div role="radiogroup" aria-label="Elegí la promo" className="space-y-2">
+              {currentPromos.map((p) => (
+                <label key={p.id} className={`flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border-2 px-3 py-2 text-sm ${promoId === p.id ? 'border-naranja-dark bg-white' : 'border-line bg-white'}`}>
+                  <input type="radio" name="cart-promo" checked={promoId === p.id} onChange={() => setPromoId(p.id)} />
                   <span className="min-w-0 flex-1">
-                    <span className="block font-medium">{a.promotion.name}{a.times > 1 ? ` ×${a.times}` : ''}</span>
-                    <span className="block text-xs text-muted">{describeDiscount(a.promotion)}</span>
+                    <span className="block font-medium">{p.name}</span>
+                    <span className="block text-xs text-muted">{describeDiscount(p)}</span>
                   </span>
-                  <span className="font-semibold text-ok">−{money(a.saved)}</span>
-                </div>
+                </label>
               ))}
-              <label className="flex min-h-11 cursor-pointer items-center gap-3 rounded-xl border border-line bg-white px-3 text-sm">
-                <input type="checkbox" checked={skipPromo} onChange={(e) => setSkipPromo(e.target.checked)} />
-                Cobrar sin promo
-              </label>
             </div>
           )}
-          {hints.map((h) => (
-            <p key={h.promotion.id} className="rounded-xl bg-amarillo/30 px-3 py-2 text-sm">
-              Sumá {h.missing} {h.missing === 1 ? 'más' : 'más'} y entra <strong>{h.promotion.name}</strong>: {describeDiscount(h.promotion)}.
+          {withPromo && !chosen && <p className="hint">Elegí una promo para aplicarla.</p>}
+          {chosen && applied.length === 0 && (
+            <p role="status" className="rounded-xl bg-amarillo/30 px-3 py-2 text-sm">
+              {hints.some((h) => h.promotion.id === chosen.id)
+                ? <>Sumá {hints.find((h) => h.promotion.id === chosen.id)?.missing} más y entra <strong>{chosen.name}</strong>.</>
+                : <>Con estos stickers no se puede aplicar <strong>{chosen.name}</strong>.</>}
+            </p>
+          )}
+          {applied.map((a) => (
+            <p key={`${a.promotion.id}|${a.packPrice}`} className="flex justify-between rounded-xl border-2 border-naranja-dark bg-white px-3 py-2 text-sm">
+              <span className="font-medium">{a.promotion.name}{a.times > 1 ? ` ×${a.times}` : ''}</span>
+              <span className="font-semibold text-ok">−{money(a.saved)}</span>
             </p>
           ))}
         </fieldset>
+      )}
+
+      {outcome === 'sale' && lines.length > 0 && (
+        <div className="space-y-2">
+          <div>
+            <label htmlFor="cart-final" className="label">Precio final (opcional)</label>
+            <input
+              id="cart-final"
+              inputMode="numeric"
+              className="input"
+              placeholder={String(calculated)}
+              value={finalText}
+              aria-invalid={priceProblem !== null}
+              aria-describedby={priceProblem ? 'cart-final-error' : undefined}
+              onChange={(e) => setFinalText(e.target.value)}
+            />
+            <p className="hint">Dejalo vacío para cobrar {money(calculated)}. Solo se puede bajar.</p>
+          </div>
+          {adjusted && (
+            <div>
+              <label htmlFor="cart-final-reason" className="label">¿Por qué cambiaste el precio?</label>
+              <input id="cart-final-reason" className="input" value={priceReason} onChange={(e) => setPriceReason(e.target.value)} />
+            </div>
+          )}
+          {priceProblem && <p id="cart-final-error" role="alert" className="text-sm text-danger">{priceProblem}</p>}
+        </div>
       )}
 
       <div>
@@ -224,7 +291,8 @@ export function Cart({ asPanel, open, onClose, event, items, quantities, promoti
           {outcome === 'sale' && discount > 0 && (
             <>
               <p className="flex justify-between text-sm text-muted"><span>Subtotal</span><span>{money(subtotal)}</span></p>
-              <p className="flex justify-between text-sm text-ok"><span>Promo</span><span>−{money(discount)}</span></p>
+              {promoDiscount > 0 && <p className="flex justify-between text-sm text-ok"><span>Promo</span><span>−{money(promoDiscount)}</span></p>}
+              {adjusted && <p className="flex justify-between text-sm text-ok"><span>Ajuste de precio</span><span>−{money(calculated - total)}</span></p>}
             </>
           )}
           <p className="flex items-baseline justify-between text-xl font-semibold">
@@ -232,7 +300,7 @@ export function Cart({ asPanel, open, onClose, event, items, quantities, promoti
             {outcome === 'sale' && <span>{money(total)}</span>}
           </p>
         </div>
-        <button type="button" className="btn min-h-14 w-full text-lg" disabled={busy || lines.length === 0} onClick={() => void confirm()}>
+        <button type="button" className="btn min-h-14 w-full text-lg" disabled={busy || lines.length === 0 || priceProblem !== null} onClick={() => void confirm()}>
           {busy ? 'Registrando…' : current.confirm}
         </button>
       </footer>

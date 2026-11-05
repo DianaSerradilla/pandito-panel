@@ -76,7 +76,7 @@ export function FinishStep({ event, pending, onBack, onClosed }: Props) {
       </section>
 
       <RecentTickets
-        key={ticketsTick}
+        key={`recent-${ticketsTick}`}
         event={event}
         items={catalog.items}
         onVoided={() => {
@@ -87,7 +87,7 @@ export function FinishStep({ event, pending, onBack, onClosed }: Props) {
 
       <SalesExport event={event} />
 
-      <CloseCount key={ticketsTick} event={event} items={catalog.items} pending={pending} onBack={onBack} onClosed={onClosed} />
+      <CloseCount key={`count-${ticketsTick}`} event={event} items={catalog.items} pending={pending} onBack={onBack} onClosed={onClosed} />
     </div>
   )
 }

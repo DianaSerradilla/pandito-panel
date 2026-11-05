@@ -145,7 +145,7 @@ export interface TicketRow {
   discount_total: number
   total: number
   payment_method: string | null
-  promo_snapshot?: { promotions?: { name: string }[] } | null
+  promo_snapshot?: { promotions?: { name: string }[]; manual_price?: { calculated: number; final: number; reason: string } } | null
   note: string | null
   created_at: string
 }

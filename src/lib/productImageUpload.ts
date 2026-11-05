@@ -1,3 +1,4 @@
+import { newClientId } from './pendingTickets.ts'
 import { extensionFor, resizeImage } from './images.ts'
 import { PRODUCT_IMAGES_BUCKET } from './storage.ts'
 import { supabase } from './supabase.ts'
@@ -16,7 +17,7 @@ export async function storeProductImage(file: File, productCode: string): Promis
   if (!supabase) throw new Error('Falta configurar la conexión con Supabase.')
   if (!file.type.startsWith('image/')) throw new Error(`${file.name} no es una imagen.`)
   const [full, thumb] = await Promise.all([resizeImage(file, FULL_SIDE, 0.85), resizeImage(file, THUMB_SIDE, 0.6)])
-  const base = `${productCode}/${crypto.randomUUID()}`
+  const base = `${productCode}/${newClientId()}`
   const fullPath = `${base}.${extensionFor(full)}`
   const thumbPath = `${base}-thumb.${extensionFor(thumb)}`
   const bucket = supabase.storage.from(PRODUCT_IMAGES_BUCKET)

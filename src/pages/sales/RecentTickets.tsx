@@ -82,9 +82,13 @@ export function RecentTickets({ event, items, onVoided }: Props) {
                   {t.kind === 'sale' && <span className="font-semibold">{money(t.total)}</span>}
                 </p>
                 <p className="text-sm">{detail}</p>
-                {(t.payment_method || t.promo_snapshot?.promotions?.length) && (
+                {(t.payment_method || t.promo_snapshot?.promotions?.length || t.promo_snapshot?.manual_price) && (
                   <p className="text-xs text-muted">
-                    {[t.payment_method ? (paymentLabels[t.payment_method] ?? t.payment_method) : '', t.promo_snapshot?.promotions?.map((p) => p.name).join(', ')]
+                    {[
+                      t.payment_method ? (paymentLabels[t.payment_method] ?? t.payment_method) : '',
+                      t.promo_snapshot?.promotions?.map((p) => p.name).join(', '),
+                      t.promo_snapshot?.manual_price ? `Precio ajustado (${t.promo_snapshot.manual_price.reason})` : '',
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </p>

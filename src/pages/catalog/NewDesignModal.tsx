@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Modal } from '../../components/Modal.tsx'
 import { useToast } from '../../components/toast.ts'
 import type { Collection, Finish, Material, PriceRow, Product, Size } from '../../data/types.ts'
+import { newClientId } from '../../lib/pendingTickets.ts'
 import { removeProductFiles, storeProductImage, type StoredImage } from '../../lib/productImageUpload.ts'
 import { supabase } from '../../lib/supabase.ts'
 
@@ -37,7 +38,7 @@ interface VariantDraft {
   height: string
 }
 
-const emptyVariant = (): VariantDraft => ({ key: crypto.randomUUID(), sizeId: '', materialId: '', finishId: '', price: '', width: '', height: '' })
+const emptyVariant = (): VariantDraft => ({ key: newClientId(), sizeId: '', materialId: '', finishId: '', price: '', width: '', height: '' })
 
 /** Object URLs for a list of files, released when the list changes or the modal closes. */
 function usePreviews(files: File[]) {
